@@ -28,7 +28,7 @@ io.use(async(socket, next)=>{
         await messageModel.create({
             chat: messagePayload.chat,
             user: socket.user._id,
-            content: messagePayload.content,
+            content: messagePayload.content,//poiuytr
             role: "user"
         })
         const chathistory = await messageModel.find({
