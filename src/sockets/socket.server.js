@@ -35,6 +35,14 @@ io.use(async(socket, next)=>{
 
         const vectors = await aiService.generateVector(messagePayload.content);
 
+         const memory = await queryMemory({
+            queryVector : vectors,
+            limit : 3,
+            metadata: {
+            }
+        })
+        console.log("memory", memory);
+
         await createMemory({
             vectors,
             messageId: message._id,
@@ -49,12 +57,31 @@ io.use(async(socket, next)=>{
             chat: messagePayload.chat
         }).sort({createdAt: -1}).limit(20).lean()).reverse()
        
-        const response = await aiService.generateResponse(chathistory.map(item=>{
+        const stm = (chathistory.map(item=>{
             return{
                 role: item.role,
                 parts : [{text: item.content }]
             }
         }))
+        
+
+
+        const ltm = [
+            {
+               role: "user",
+               parts:[{
+                text: 
+                `there are some previous message from chat , use them to generate response
+                
+                ${memory.map(item=> item.metadata.text).join("\n")}`
+               }] 
+               
+            }
+        ]
+        console.log(stm[0]);
+        console.log(ltm)
+
+        const response = await aiService.generateResponse([...ltm, ...stm]);
          const responseMessage =  await messageModel.create({
             chat: messagePayload.chat,
             user: socket.user._id,
@@ -74,13 +101,9 @@ io.use(async(socket, next)=>{
             }
         })
 
-        const memory = await queryMemory({
-            queryVector : responseVectors,
-            limit : 3,
-            metadata: {}
-        })
-        console.log("memory", memory);
+       
 
+        
         socket.emit("ai-response",{
             content: response,
             chat : messagePayload.chat,
