@@ -31,27 +31,21 @@ function initSocketServer(httpServer){
         socket.on("ai-message", async (messagePayload)=>{
             console.log(messagePayload);
 
-            // User ka message DB me save karna
-            const message =  await messageModel.create({
-                chat: messagePayload.chat,
+           // User ka message DB me save karna
+            const [message, vectors] = await Promise.all([
+               messageModel.create({
+                 chat: messagePayload.chat,
                 user: socket.user._id,
                 content: messagePayload.content,
                 role: "user"
-            })
-
-            // User ke message ka vector (embedding) banana
-            const vectors = await aiService.generateVector(messagePayload.content);
-
-            // Memory me similar vectors (pichle related messages) khojna
-            const memory = await queryMemory({
-                queryVector : vectors,
-                limit : 3,
-                metadata: {}
-            })
-            console.log("memory", memory);
-
-            // User ke message ko memory (vector DB) me store karna
-            await createMemory({
+               }),
+               // User ke message ka vector (embedding) banana
+               aiService.generateVector(messagePayload.content),
+               // User ke message ko memory (vector DB) me store karna
+              
+            ])
+        
+           await createMemory({
                 vectors,
                 messageId: message._id,
                 metadata: {
@@ -61,11 +55,22 @@ function initSocketServer(httpServer){
                 }
             })
 
+            const [memory, chathistory] = await Promise.all([
+                // Memory me similar vectors (pichle related messages) khojna
+                queryMemory({
+                queryVector : vectors,
+                limit : 3,
+                metadata: {
+                    user : socket.user._id,
+                }
+            }),
             // Chat history nikalna (pichle 20 messages)
-            const chathistory = (await messageModel.find({
+            messageModel.find({
                 chat: messagePayload.chat
-            }).sort({createdAt: -1}).limit(20).lean()).reverse()
-           
+            }).sort({createdAt: -1}).limit(20).lean()
+            ])
+            chathistory.reverse(); // Taaki purane messages pehle aaye
+     
             // Short-term memory (STM): Recent messages ko AI format me convert karna
             const stm = (chathistory.map(item=>{
                 return{
@@ -92,17 +97,19 @@ function initSocketServer(httpServer){
             // AI se response generate karwana (STM + LTM dono mila ke)
             const response = await aiService.generateResponse([...ltm, ...stm]);
 
-            // AI ka response message DB me save karna
-            const responseMessage =  await messageModel.create({
+
+            const [responseMessage, responseVectors] = await Promise.all([
+                 // AI ka response message DB me save karna
+                messageModel.create({
                 chat: messagePayload.chat,
                 user: socket.user._id,
                 content: response,
                 role: "model"
-            })
-            
-            // AI ke response ka vector banana
-            const responseVectors = await aiService.generateVector(response);
-            
+            }),
+             // AI ke response ka vector banana
+            aiService.generateVector(response)
+            ])
+        
             // Response vector ko memory me store karna
             await createMemory({
                 vectors: responseVectors,

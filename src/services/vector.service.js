@@ -18,7 +18,7 @@ async function queryMemory({ queryVector, limit =5 , metadata }){
         vector : queryVector,
         topK : limit,
         includeMetadata: true,
-        filter : metadata ? {metadata} : undefined,
+        filter : metadata ? metadata : undefined,
     })
     return data.matches 
     }
